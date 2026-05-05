@@ -68,7 +68,7 @@ check_db_history() {
   fi
 
   if [[ "$VV_LOG_CHANGE" =~ ^-?[0-9]+$ && "$VV_LOG_CHANGE" -lt 0 ]]; then
-    mark_fail "전일대비당일증감건수감소" "today_vs_yesterday_decrease ${TODAY}-${YESTERDAY} ${VV_LOG_CHANGE}"
+    mark_fail "전일대비당일건수감소" "today_vs_yesterday_decrease ${TODAY}-${YESTERDAY} ${VV_LOG_CHANGE}"
   fi
 }
 
@@ -148,48 +148,42 @@ fi
 
 
 for name in "${COMPARE_FILES[@]}"; do
+  label="${name#CODE}"
   file_now="${TARGET_DIR}/${name}.${TODAY}"
   file_old="${TARGET_DIR}/${name}.${YESTERDAY}"
 
   if [[ ! -f "$file_now" ]]; then
-    FILE_LINE="${FILE_LINE}[${name}:당일X] "
+    FILE_LINE="${FILE_LINE}[${label}:당일X] "
     continue
   fi
 
   line_now=$(wc -l < "$file_now")
-  size_now=$(wc -c < "$file_now")
-
   if [[ -f "$file_old" ]]; then
     line_old=$(wc -l < "$file_old")
-    size_old=$(wc -c < "$file_old")
     line_pct=$(pct_diff "$line_now" "$line_old")
-    size_pct=$(pct_diff "$size_now" "$size_old")
   else
-    line_old="-"
-    size_old="-"
     line_pct="-"
-    size_pct="-"
   fi
 
-  FILE_LINE="${FILE_LINE}[${name}:LINE ${line_now}/${line_old},사이즈 ${size_now}/${size_old},LINE ${line_pct},사이즈 ${size_pct}] "
+  FILE_LINE="${FILE_LINE}[${label}:${line_pct}] "
 done
 
 for name in "${NEW_FILES[@]}"; do
+  label="${name#CODE}"
   file_now="${TARGET_DIR}/${name}.${TODAY}"
 
   if [[ ! -f "$file_now" ]]; then
-    FILE_LINE="${FILE_LINE}[${name}:당일X] "
+    FILE_LINE="${FILE_LINE}[${label}:당일X] "
     continue
   fi
 
-  line_now=$(wc -l < "$file_now")
   size_now=$(wc -c < "$file_now")
 
   if [[ "$name" == "CODEPROPERTIES" ]]; then
-    size_mb=$(awk -v bytes="$size_now" 'BEGIN { printf "%.2f", bytes / 1024 / 1024 }')
-    FILE_LINE="${FILE_LINE}[${name}:LINE ${line_now},사이즈 ${size_mb}MB] "
+    size_mb=$(awk -v bytes="$size_now" 'BEGIN { printf "%.0f", bytes / 1024 / 1024 }')
+    FILE_LINE="${FILE_LINE}[${label}:${size_mb}MB] "
   else
-    FILE_LINE="${FILE_LINE}[${name}:LINE ${line_now},사이즈 ${size_now}] "
+    FILE_LINE="${FILE_LINE}[${label}:${size_now}B] "
   fi
 done
 
