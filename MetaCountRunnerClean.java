@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MetaCountRunnerClean {
-
     public static void main(String[] args) {
         try {
             if (args.length < 1) {
@@ -19,8 +18,8 @@ public class MetaCountRunnerClean {
             Class.forName(ExecutorConf.getMeta_driver());
 
             try (Connection conn = createMetaConnection()) {
-                String dailySummary = getDailySummary(conn, natCd);
                 String regTypeSummary = "";
+                DailyChangeResult dailyChangeResult = new DailyChangeResult("", "");
 
                 try {
                     regTypeSummary = getRegTypeSummary(conn, natCd);
@@ -28,11 +27,14 @@ public class MetaCountRunnerClean {
                     System.err.println(e.getMessage());
                 }
 
-                if (regTypeSummary == null || regTypeSummary.isEmpty()) {
-                    System.out.println(dailySummary);
-                } else {
-                    System.out.println(dailySummary + "@@" + regTypeSummary);
+                try {
+                    dailyChangeResult = getDailyChangeSummary(conn, natCd);
+                } catch (Exception e) {
+                    System.err.println(e.getMessage());
                 }
+
+                System.out.println("OK@@" + regTypeSummary + "@@" + dailyChangeResult.summary + "@@"
+                        + dailyChangeResult.vvLogChange);
             }
         } catch (Exception e) {
             System.err.println(e.getMessage());
@@ -40,27 +42,47 @@ public class MetaCountRunnerClean {
         }
     }
 
+    private static DailyChangeResult getDailyChangeSummary(Connection conn, String natCd) throws Exception {
+        int todayCount = 0;
+        int yesterdayCount = 0;
+        int beforeYesterdayCount = 0;
+
+        try (PreparedStatement pstmt = conn.prepareStatement(getDailyCountSql())) {
+            pstmt.setString(1, natCd);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    todayCount = rs.getInt(1);
+                    yesterdayCount = rs.getInt(2);
+                    beforeYesterdayCount = rs.getInt(3);
+                }
+            }
+        }
+
+        List<String> dailyChangeBlocks = new ArrayList<>();
+
+        if (todayCount > 0) {
+            dailyChangeBlocks.add("[당일건수 " + String.format("%,d", todayCount) + "건]");
+        }
+
+        String vvLogChange = "";
+        if (todayCount > 0 && yesterdayCount > 0) {
+            int change = todayCount - yesterdayCount;
+            vvLogChange = String.valueOf(change);
+            dailyChangeBlocks.add("[당일-전일 증감건수 " + change + "건]");
+        }
+
+        if (todayCount > 0 && beforeYesterdayCount > 0) {
+            dailyChangeBlocks.add("[당일-전전일 증감건수 " + (todayCount - beforeYesterdayCount) + "건]");
+        }
+
+        return new DailyChangeResult(String.join(" ", dailyChangeBlocks), vvLogChange);
+    }
+
     private static Connection createMetaConnection() throws Exception {
         return DriverManager.getConnection(
                 ExecutorConf.getMeta_jdbcUrl(),
                 ExecutorConf.getMeta_user(),
                 ExecutorConf.getMeta_password());
-    }
-
-    private static String getDailySummary(Connection conn, String natCd) throws Exception {
-        try (PreparedStatement pstmt = conn.prepareStatement(getDailyCountSql())) {
-            pstmt.setString(1, natCd);
-
-            try (ResultSet rs = pstmt.executeQuery()) {
-                List<String> result = new ArrayList<>();
-
-                while (rs.next()) {
-                    result.add(rs.getString(1) + " " + rs.getInt(2) + "건");
-                }
-
-                return String.join("|", result);
-            }
-        }
     }
 
     private static String getRegTypeSummary(Connection conn, String natCd) throws Exception {
@@ -87,15 +109,6 @@ public class MetaCountRunnerClean {
         return "CU : " + String.format("%,d", cuCount) + " / D : " + String.format("%,d", dCount);
     }
 
-    private static String getDailyCountSql() {
-        return ""
-                + "SELECT base_dt, COUNT(*) \n"
-                + "FROM vv_log \n"
-                + "WHERE nat_cd = ? \n"
-                + "GROUP BY base_dt \n"
-                + "ORDER BY base_dt \n";
-    }
-
     private static String getRegTypeCountSql() {
         return ""
                 + "SELECT reg_type, COUNT(*) \n"
@@ -103,5 +116,25 @@ public class MetaCountRunnerClean {
                 + "WHERE nat_cd = ? \n"
                 + "  AND apl_dt >= DATE_FORMAT(CURRENT_DATE, '%Y%m%d') \n"
                 + "GROUP BY reg_type \n";
+    }
+
+    private static String getDailyCountSql() {
+        return ""
+                + "SELECT \n"
+                + "  SUM(CASE WHEN base_dt = DATE_FORMAT(CURRENT_DATE, '%Y%m%d') THEN 1 ELSE 0 END) AS today_cnt, \n"
+                + "  SUM(CASE WHEN base_dt = DATE_FORMAT(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '%Y%m%d') THEN 1 ELSE 0 END) AS yesterday_cnt, \n"
+                + "  SUM(CASE WHEN base_dt = DATE_FORMAT(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '%Y%m%d') THEN 1 ELSE 0 END) AS before_yesterday_cnt \n"
+                + "FROM vv_log \n"
+                + "WHERE nat_cd = ? \n";
+    }
+
+    private static class DailyChangeResult {
+        private final String summary;
+        private final String vvLogChange;
+
+        private DailyChangeResult(String summary, String vvLogChange) {
+            this.summary = summary;
+            this.vvLogChange = vvLogChange;
+        }
     }
 }
