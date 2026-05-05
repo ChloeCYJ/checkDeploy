@@ -4,17 +4,17 @@ checkDeploy
 
 필요한 파일
 
-- [check_deploy.sh]
+- [check_deploy_clean.sh]
 - [check.conf]
-- [MetaCountRunner.java]
+- [MetaCountRunnerClean.java]
 
 실행
 
 ```bash
-./check_deploy.sh
-./check_deploy.sh KOR
-./check_deploy.sh JPN
-./check_deploy.sh CAM
+./check_deploy_clean.sh
+./check_deploy_clean.sh KOR
+./check_deploy_clean.sh JPN
+./check_deploy_clean.sh CAM
 ```
 
 - 인자를 안 주면 기본값은 `KOR`
@@ -22,7 +22,7 @@ checkDeploy
 체크 기준
 
 - DB 체크는 코드 집계 테이블만 수행
-- DB 결과는 2일전, 1일전, 당일 3일치 건수
+- DB 결과는 당일 건수 + (있을 때만) 전일/전전일 비교 증감건수와 `CU/D` 건수 중심으로 기록
 - `NEWCODEINF`, `NEWCODEVAL`
   오늘 line/size 만 기록
 - `CODEPROPERTIES`, `CODEINF`, `CODEVAL`
@@ -35,7 +35,8 @@ checkDeploy
   `FAIL`
 - 그 외
   `SUCCESS`
-- 오늘 파일 없음도 `FAIL` 로 바꾸고 싶으면 `check_deploy.sh` 안 주석 블록을 해제해서 사용
+- 당일 집계건수 없으면 `FAIL`
+- 당일-전일 증감건수가 음수면 `FAIL`
 
 check.conf 에서 수정할 것
 
@@ -59,7 +60,8 @@ check.conf 에서 수정할 것
 DB 체크 라인 예시
 
 ```text
-[20260428_집계테이블체크] [정상] [[당일 152건] [당일대비 전일 증감률 -15건] [당일대비 전전일 증감률 +12건] [CU : 2 / D : 1]]
+[20260428_집계테이블체크] [정상] [[당일 건수 120건] [당일-전일 증감건수 15건] [당일-전전일 증감건수 12건] [CU : 2 / D : 1]]
+[20260428_집계테이블체크] [정상] [[당일 건수 120건] [CU : 2 / D : 1]]
 ```
 
 정책
